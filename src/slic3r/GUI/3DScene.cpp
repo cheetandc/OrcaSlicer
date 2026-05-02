@@ -2151,7 +2151,7 @@ void _3DScene::extrusionentity_to_verts(const ExtrusionPath&    extrusion_path,
                                         const Point&            copy,
                                         GUI::GLModel::Geometry& geometry)
 {
-    Polyline polyline = extrusion_path.polyline;
+    Polyline            polyline = extrusion_path.polyline.to_polyline();
     polyline.remove_duplicate_points();
     polyline.translate(copy);
     const Lines         lines = polyline.lines();
@@ -2170,7 +2170,7 @@ void _3DScene::extrusionentity_to_verts(const ExtrusionLoop&    extrusion_loop,
     std::vector<double> widths;
     std::vector<double> heights;
     for (const ExtrusionPath& extrusion_path : extrusion_loop.paths) {
-        Polyline polyline = extrusion_path.polyline;
+        Polyline            polyline = extrusion_path.polyline.to_polyline();
         polyline.remove_duplicate_points();
         polyline.translate(copy);
         const Lines lines_this = polyline.lines();
@@ -2191,7 +2191,7 @@ void _3DScene::extrusionentity_to_verts(const ExtrusionMultiPath& extrusion_mult
     std::vector<double> widths;
     std::vector<double> heights;
     for (const ExtrusionPath& extrusion_path : extrusion_multi_path.paths) {
-        Polyline polyline = extrusion_path.polyline;
+        Polyline            polyline = extrusion_path.polyline.to_polyline();
         polyline.remove_duplicate_points();
         polyline.translate(copy);
         const Lines lines_this = polyline.lines();

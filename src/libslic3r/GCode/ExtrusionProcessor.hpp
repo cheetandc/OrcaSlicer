@@ -27,19 +27,19 @@
 
 namespace Slic3r {
 
-struct ExtendedPoint
+template<int Dim> struct ExtendedPoint
 {
-    Vec2d position;
+    Eigen::Matrix<double, Dim, 1, Eigen::DontAlign> position;
     float distance;
     float curvature;
 };
 
 template<bool SCALED_INPUT, bool ADD_INTERSECTIONS, bool PREV_LAYER_BOUNDARY_OFFSET, bool SIGNED_DISTANCE, typename POINTS, typename L>
-std::vector<ExtendedPoint> estimate_points_properties(const POINTS                           &input_points,
-                                                      const AABBTreeLines::LinesDistancer<L> &unscaled_prev_layer,
-                                                      float                                   flow_width,
-                                                      float                                   max_line_length = -1.0f,
-                                                      float                                   min_distance = -1.0f)
+std::vector<ExtendedPoint<L::Dim>> estimate_points_properties(const POINTS&                           input_points,
+                                                              const AABBTreeLines::LinesDistancer<L>& unscaled_prev_layer,
+                                                              float                                   flow_width,
+                                                              float                                   max_line_length = -1.0f,
+                                                              float                                   min_distance    = -1.0f)
 {
     bool   looped     = input_points.front() == input_points.back();
     std::function<size_t(size_t,size_t)> get_prev_index = [](size_t idx, size_t count) {
@@ -78,35 +78,36 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
     double min_spacing = flow_width*0.25;
 
     using AABBScalar = typename AABBTreeLines::LinesDistancer<L>::Scalar;
+    using Vec        = Eigen::Matrix<double, L::Dim, 1, Eigen::DontAlign>;
     if (input_points.empty())
         return {};
     float boundary_offset = PREV_LAYER_BOUNDARY_OFFSET ? 0.5 * flow_width : 0.0f;
-    auto  maybe_unscale   = [](const P &p) { return SCALED_INPUT ? unscaled(p) : p.template cast<double>(); };
+    auto  maybe_unscale   = [](const P& p) -> Vec { return SCALED_INPUT ? unscaled(p) : p.template cast<double>(); };
 
-    std::vector<ExtendedPoint> points;
+    std::vector<ExtendedPoint<L::Dim>> points;
     points.reserve(input_points.size() * (ADD_INTERSECTIONS ? 1.5 : 1));
 
     {
-        ExtendedPoint start_point{maybe_unscale(input_points.front())};
-        auto [distance, nearest_line,
-              x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(start_point.position.cast<AABBScalar>());
+        ExtendedPoint<L::Dim> start_point{maybe_unscale(input_points.front())};
+        auto [distance, nearest_line, x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(
+            start_point.position.template cast<AABBScalar>());
         start_point.distance = distance + boundary_offset;
         points.push_back(start_point);
     }
     for (size_t i = 1; i < input_points.size(); i++) {
-        ExtendedPoint next_point{maybe_unscale(input_points[i])};
+        ExtendedPoint<L::Dim> next_point{maybe_unscale(input_points[i])};
         auto [distance, nearest_line,
-              x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(next_point.position.cast<AABBScalar>());
+              x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(next_point.position.template cast<AABBScalar>());
         next_point.distance = distance + boundary_offset;
 
         // Intersection handling
         if (ADD_INTERSECTIONS &&
             ((points.back().distance > boundary_offset + EPSILON) != (next_point.distance > boundary_offset + EPSILON))) {
-            const ExtendedPoint &prev_point    = points.back();
-            auto                 intersections = unscaled_prev_layer.template intersections_with_line<true>(
-                L{prev_point.position.cast<AABBScalar>(), next_point.position.cast<AABBScalar>()});
+            const ExtendedPoint<L::Dim>& prev_point    = points.back();
+            auto                         intersections = unscaled_prev_layer.template intersections_with_line<true>(
+                L{prev_point.position.template cast<AABBScalar>(), next_point.position.template cast<AABBScalar>()});
             for (const auto &intersection : intersections) {
-                ExtendedPoint p{};
+                ExtendedPoint<L::Dim> p{};
                 p.position = intersection.first.template cast<double>();
                 p.distance = boundary_offset;
                 // ORCA: Filter out points that are introduced at intersections if their distance from the previous or next point is not meaningful
@@ -121,12 +122,12 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
 
     // Segmentation handling
     if (PREV_LAYER_BOUNDARY_OFFSET && ADD_INTERSECTIONS) {
-        std::vector<ExtendedPoint> new_points;
+        std::vector<ExtendedPoint<L::Dim>> new_points;
         new_points.reserve(points.size() * 2);
         new_points.push_back(points.front());
         for (int point_idx = 0; point_idx < int(points.size()) - 1; ++point_idx) {
-            const ExtendedPoint &curr = points[point_idx];
-            const ExtendedPoint &next = points[point_idx + 1];
+            const ExtendedPoint<L::Dim>& curr = points[point_idx];
+            const ExtendedPoint<L::Dim>& next = points[point_idx + 1];
 
             if ((curr.distance > -boundary_offset && curr.distance < boundary_offset + 2.0f) ||
                 (next.distance > -boundary_offset && next.distance < boundary_offset + 2.0f)) {
@@ -144,10 +145,10 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
                     double t1 = std::max(a0, a1);
 
                     if (t0 < 1.0) {
-                        Vec2d p0     = curr.position + t0 * (next.position - curr.position);
-                        auto [p0_dist, p0_near_l,
-                              p0_x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(p0.cast<AABBScalar>());
-                        ExtendedPoint new_p{};
+                        Vec p0                          = curr.position + t0 * (next.position - curr.position);
+                        auto [p0_dist, p0_near_l, p0_x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(
+                            p0.template cast<AABBScalar>());
+                        ExtendedPoint<L::Dim> new_p{};
                         new_p.position = p0;
                         new_p.distance = float(p0_dist + boundary_offset);
                         // ORCA: only create a new point in the path if the new point overhang distance will be used to generate a speed change
@@ -161,10 +162,10 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
                         }
                     }
                     if (t1 > 0.0) {
-                        Vec2d p1     = curr.position + t1 * (next.position - curr.position);
-                        auto [p1_dist, p1_near_l,
-                              p1_x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(p1.cast<AABBScalar>());
-                        ExtendedPoint new_p{};
+                        Vec p1                          = curr.position + t1 * (next.position - curr.position);
+                        auto [p1_dist, p1_near_l, p1_x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(
+                            p1.template cast<AABBScalar>());
+                        ExtendedPoint<L::Dim> new_p{};
                         new_p.position = p1;
                         new_p.distance = float(p1_dist + boundary_offset);
                         // ORCA: only create a new point in the path if the new point overhang distance will be used to generate a speed change
@@ -186,21 +187,21 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
 
     // Maximum line length handling
     if (max_line_length > 0) {
-        std::vector<ExtendedPoint> new_points;
+        std::vector<ExtendedPoint<L::Dim>> new_points;
         new_points.reserve(points.size() * 2);
         {
             for (size_t i = 0; i + 1 < points.size(); i++) {
-                const ExtendedPoint &curr = points[i];
-                const ExtendedPoint &next = points[i + 1];
+                const ExtendedPoint<L::Dim>& curr = points[i];
+                const ExtendedPoint<L::Dim>& next = points[i + 1];
                 new_points.push_back(curr);
                 double len             = (next.position - curr.position).squaredNorm();
                 double t               = sqrt((max_line_length * max_line_length) / len);
                 size_t new_point_count = 1.0 / t;
                 for (size_t j = 1; j < new_point_count + 1; j++) {
-                    Vec2d pos  = curr.position * (1.0 - j * t) + next.position * (j * t);
+                    Vec pos    = curr.position * (1.0 - j * t) + next.position * (j * t);
                     auto [p_dist, p_near_l,
-                          p_x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(pos.cast<AABBScalar>());
-                    ExtendedPoint new_p{};
+                          p_x] = unscaled_prev_layer.template distance_from_lines_extra<SIGNED_DISTANCE>(pos.template cast<AABBScalar>());
+                    ExtendedPoint<L::Dim> new_p{};
                     new_p.position = pos;
                     new_p.distance = float(p_dist + boundary_offset);
                     
@@ -219,8 +220,8 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
     float accumulated_distance = 0;
     std::vector<float> distances_for_curvature(points.size());
     for (size_t point_idx = 0; point_idx < points.size(); ++point_idx) {
-        const ExtendedPoint &a = points[point_idx];
-        const ExtendedPoint &b = points[get_prev_index(point_idx, points.size())];
+        const ExtendedPoint<L::Dim>& a = points[point_idx];
+        const ExtendedPoint<L::Dim>& b = points[get_prev_index(point_idx, points.size())];
 
         distances_for_curvature[point_idx] = (b.position - a.position).norm();
         accumulated_distance += distances_for_curvature[point_idx];
@@ -229,9 +230,9 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
     if (accumulated_distance > EPSILON)
         for (float window_size : {3.0f, 9.0f, 16.0f}) {
             for (int point_idx = 0; point_idx < int(points.size()); ++point_idx) {
-                ExtendedPoint &current = points[point_idx];
+                ExtendedPoint<L::Dim>& current = points[point_idx];
 
-                Vec2d back_position = current.position;
+                Vec back_position = current.position;
                 {
                     size_t back_point_index = point_idx;
                     float  dist_backwards   = 0;
@@ -251,7 +252,7 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
                     }
                 }
 
-                Vec2d front_position = current.position;
+                Vec front_position = current.position;
                 {
                     size_t front_point_index = point_idx;
                     float  dist_forwards     = 0;
@@ -271,7 +272,9 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
                     }
                 }
 
-                float new_curvature = angle(current.position - back_position, front_position - current.position) / window_size;
+                float new_curvature = angle((current.position - back_position).template head<2>(),
+                                            (front_position - current.position).template head<2>()) /
+                                      window_size;
                 if (abs(current.curvature) < abs(new_curvature)) {
                     current.curvature = new_curvature;
                 }
@@ -283,15 +286,15 @@ std::vector<ExtendedPoint> estimate_points_properties(const POINTS              
 
 struct ProcessedPoint
 {
-    Point p;
+    Point3 p;
     float speed = 1.0f;
     float overlap = 1.0f;
 };
 
 class ExtrusionQualityEstimator
 {
-    std::unordered_map<const PrintObject *, AABBTreeLines::LinesDistancer<Linef>> prev_layer_boundaries;
-    std::unordered_map<const PrintObject *, AABBTreeLines::LinesDistancer<Linef>> next_layer_boundaries;
+    std::unordered_map<const PrintObject*, AABBTreeLines::LinesDistancer<Linef3>>      prev_layer_boundaries;
+    std::unordered_map<const PrintObject*, AABBTreeLines::LinesDistancer<Linef3>>      next_layer_boundaries;
     std::unordered_map<const PrintObject *, AABBTreeLines::LinesDistancer<CurledLine>> prev_curled_extrusions;
     std::unordered_map<const PrintObject *, AABBTreeLines::LinesDistancer<CurledLine>> next_curled_extrusions;
     const PrintObject                                                            *current_object;
@@ -304,7 +307,7 @@ public:
         if (layer == nullptr) return;
         const PrintObject *object = obj;
         prev_layer_boundaries[object] = next_layer_boundaries[object];
-        next_layer_boundaries[object] = AABBTreeLines::LinesDistancer<Linef>{to_unscaled_linesf(layer->lslices)};
+        next_layer_boundaries[object]  = AABBTreeLines::LinesDistancer<Linef3>{to_unscaled_linesf3(layer->lslices)};
         prev_curled_extrusions[object] = next_curled_extrusions[object];
         next_curled_extrusions[object] = AABBTreeLines::LinesDistancer<CurledLine>{layer->curled_lines};
     }

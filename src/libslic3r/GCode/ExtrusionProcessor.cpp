@@ -52,7 +52,7 @@ std::vector<ProcessedPoint> ExtrusionQualityEstimator::estimate_extrusion_qualit
         smallest_distance_with_lower_speed=-1.f;
 
     // Orca: Pass to the point properties estimator the smallest ovehang distance that triggers a slowdown (smallest_distance_with_lower_speed)
-    std::vector<ExtendedPoint> extended_points = estimate_points_properties<true, true, true, true>
+    std::vector<ExtendedPoint<3>> extended_points = estimate_points_properties<true, true, true, true>
                                                             (path.polyline.points,
                                                              prev_layer_boundaries[current_object],
                                                              path.width,
@@ -62,15 +62,15 @@ std::vector<ProcessedPoint> ExtrusionQualityEstimator::estimate_extrusion_qualit
     std::vector<ProcessedPoint> processed_points;
     processed_points.reserve(extended_points.size());
     for (size_t i = 0; i < extended_points.size(); i++) {
-        const ExtendedPoint &curr = extended_points[i];
-        const ExtendedPoint &next = extended_points[i + 1 < extended_points.size() ? i + 1 : i];
+        const ExtendedPoint<3> &curr = extended_points[i];
+        const ExtendedPoint<3> &next = extended_points[i + 1 < extended_points.size() ? i + 1 : i];
         
         float artificial_distance_to_curled_lines = 0.0;
         if(slowdown_for_curled_edges) {
         	// The following code artifically increases the distance to provide slowdown for extrusions that are over curled lines
         	const double dist_limit = 10.0 * path.width;
 				{
-				Vec2d middle = 0.5 * (curr.position + next.position);
+				Vec3d middle = 0.5 * (curr.position + next.position);
 				auto line_indices = prev_curled_extrusions[current_object].all_lines_in_radius(Point::new_scale(middle), scale_(dist_limit));
 					if (!line_indices.empty()) {
 						double len   = (next.position - curr.position).norm();
@@ -79,14 +79,14 @@ std::vector<ProcessedPoint> ExtrusionQualityEstimator::estimate_extrusion_qualit
                 	// NOTE that this is still quite rough approximation, e.g. we are still checking lines only near the middle point
                 	// TODO maybe split the lines into smaller segments before running this alg? but can be demanding, and GCode will be huge
                 	if (len > 2) {
-                    	Vec2d dir   = Vec2d(next.position - curr.position) / len;
+                    	Vec2d dir   = Vec2d(next.position.head<2>() - curr.position.head<2>()) / len;
                     	Vec2d right = Vec2d(-dir.y(), dir.x());
 
                     	Polygon box_of_influence = {
-                        	scaled(Vec2d(curr.position + right * dist_limit)),
-                        	scaled(Vec2d(next.position + right * dist_limit)),
-                        	scaled(Vec2d(next.position - right * dist_limit)),
-                        	scaled(Vec2d(curr.position - right * dist_limit)),
+                        	scaled(Vec2d(curr.position.head<2>() + right * dist_limit)),
+                        	scaled(Vec2d(next.position.head<2>() + right * dist_limit)),
+                        	scaled(Vec2d(next.position.head<2>() - right * dist_limit)),
+                        	scaled(Vec2d(curr.position.head<2>() - right * dist_limit)),
                     	};
 
                     	double projected_lengths_sum = 0;
@@ -151,7 +151,7 @@ std::vector<ProcessedPoint> ExtrusionQualityEstimator::estimate_extrusion_qualit
         
         float overlap = std::min(1 - (curr.distance+artificial_distance_to_curled_lines) * width_inv, 1 - (next.distance+artificial_distance_to_curled_lines) * width_inv);
 			
-        processed_points.push_back({ scaled(curr.position), extrusion_speed, overlap });
+        processed_points.push_back({Point3(scaled(curr.position)), extrusion_speed, overlap});
     }
     return processed_points;
 }
