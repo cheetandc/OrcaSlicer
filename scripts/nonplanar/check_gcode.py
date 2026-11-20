@@ -2,13 +2,17 @@
 """Safety check for G-code with Z moves inside a layer (ZAA / non-planar).
 
 Usage: check_gcode.py FILE.gcode [--max-slope DEG] [--tool-lift MM] [--max-z-speed MM_S]
+                                 [--travel-tol MM]
+
+For Z contouring (ZAA) output use --max-slope 45 --travel-tol LAYER_HEIGHT:
+ZAA shifts roads by up to one layer height over short segments.
 
 Reports, and exits non-zero on, any of:
   * a move below Z 0
   * an extruding move steeper than --max-slope
   * an extruding move whose Z component is faster than --max-z-speed
-  * a non-extruding XY travel longer than 2 mm made below the highest
-    material extruded so far in the same layer
+  * a non-extruding XY travel longer than 2 mm made more than --travel-tol
+    below the highest material extruded so far in the same layer
   * a tool change (T<n>) started with the nozzle less than --tool-lift above
     the highest material extruded so far
 
@@ -30,6 +34,7 @@ def main() -> int:
     ap.add_argument("--max-slope", type=float, default=15.0, help="degrees")
     ap.add_argument("--tool-lift", type=float, default=6.0, help="mm above printed material")
     ap.add_argument("--max-z-speed", type=float, default=20.0, help="mm/s")
+    ap.add_argument("--travel-tol", type=float, default=0.0, help="mm a travel may run below printed material")
     ap.add_argument("--max-report", type=int, default=20)
     a = ap.parse_args()
 
@@ -100,7 +105,7 @@ def main() -> int:
                     layer_top = max(layer_top, top)
                     print_top = max(print_top, top)
                 elif de <= 0 and dxy > 2.0 and layer_top > 0:
-                    if min(z, nz) < layer_top - 1e-6:
+                    if min(z, nz) < layer_top - a.travel_tol - 1e-6:
                         bad(n, f"travel at Z {min(z, nz):.3f} below printed {layer_top:.3f}")
                 x, y, z = nx, ny, nz
 

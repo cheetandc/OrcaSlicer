@@ -3831,6 +3831,18 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0.05));
 
+    def = this->add("zaa_max_speed", coFloat);
+    def->label    = L("Z contouring speed limit");
+    def->category = L("Quality");
+    def->tooltip  = L("Maximum print speed of extrusions that move in Z within a layer. "
+                       "Contoured extrusions consist of short steep segments, so a high speed asks for fast Z axis moves. "
+                       "Keep this low on printers whose Z axis is slow or has no position feedback.");
+    def->sidetext = L("mm/s");
+    def->min      = 1;
+    def->max      = 50;
+    def->mode     = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(20));
+
     def = this->add("layer_change_gcode", coString);
     def->label = L("Layer change G-code");
     def->tooltip = L("This G-code is inserted at every layer change after the Z lift.");

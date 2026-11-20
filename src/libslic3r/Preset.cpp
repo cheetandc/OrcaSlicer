@@ -994,7 +994,7 @@ static std::vector<std::string> s_Preset_print_options {
      "calib_flowrate_topinfill_special_order",
      "process_flow_support",
      // Z Anti-Aliasing (ZAA)
-     "zaa_enabled", "zaa_minimize_perimeter_height", "zaa_dont_alternate_fill_direction", "zaa_min_z",
+     "zaa_enabled", "zaa_minimize_perimeter_height", "zaa_dont_alternate_fill_direction", "zaa_min_z", "zaa_max_speed",
 };
 
 static std::vector<std::string> s_Preset_filament_options {

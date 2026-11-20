@@ -2730,6 +2730,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("zaa_minimize_perimeter_height");
         optgroup->append_single_option_line("zaa_min_z");
         optgroup->append_single_option_line("zaa_dont_alternate_fill_direction");
+        optgroup->append_single_option_line("zaa_max_speed");
         // Orca: it's not used yet, so hide it in UI for now
         // optgroup->append_single_option_line("ironing_expansion");
 

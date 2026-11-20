@@ -1197,6 +1197,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool, zaa_dont_alternate_fill_direction))
     ((ConfigOptionFloat, zaa_min_z))
     ((ConfigOptionFloat, zaa_minimize_perimeter_height))
+    ((ConfigOptionFloat, zaa_max_speed))
     )
 
 PRINT_CONFIG_CLASS_DEFINE(

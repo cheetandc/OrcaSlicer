@@ -8180,6 +8180,10 @@ std::string GCode::_extrude(const ExtrusionPath& path, std::string description, 
         // cap speed with max_volumetric_speed anyway (even if user is not using autospeed)
         speed = std::min(speed, filament_max_volumetric_speed / _mm3_per_mm);
     }
+    // Z contouring: these paths are made of short steep segments, so the print speed sets the Z axis speed.
+    const double zaa_max_speed = path.z_contoured ? m_config.zaa_max_speed.value : 0.;
+    if (zaa_max_speed > 0)
+        speed = std::min(speed, zaa_max_speed);
     // ORCA: resonance‑avoidance on short external perimeters
     {
         double ref_speed = speed; // stash the pre‑cap speed
@@ -8256,6 +8260,9 @@ std::string GCode::_extrude(const ExtrusionPath& path, std::string description, 
         new_points = m_extrusion_quality_estimator.estimate_extrusion_quality(path, overhang_overlap_levels, dynamic_overhang_speeds,
                                                                               ref_speed, speed,
                                                                               this->process_flow_value(m_config.slowdown_for_curled_perimeters));
+        if (zaa_max_speed > 0)
+            for (ProcessedPoint& p : new_points)
+                p.speed = std::min(p.speed, float(zaa_max_speed));
         variable_speed = std::any_of(new_points.begin(), new_points.end(), [speed](const ProcessedPoint& p) {
             return fabs(double(p.speed) - speed) > 1;
         }); // Ignore small speed variations (under 1mm/sec)
