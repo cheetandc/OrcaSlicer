@@ -3796,16 +3796,6 @@ void PrintConfigDef::init_fff_params()
     def->mode     = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(-1));
 
-    def           = this->add("ironing_expansion", coFloat);
-    def->label    = L("Ironing expansion");
-    def->category = L("Quality");
-    def->tooltip  = L("Expand or contract the ironing area.");
-    def->sidetext = L("mm");
-    def->min      = -100;
-    def->max      = 100;
-    def->mode     = comExpert;
-    def->set_default_value(new ConfigOptionFloat(0));
-
     def = this->add("zaa_enabled", coBool);
     def->label    = L("Z contouring enabled");
     def->category = L("Quality");

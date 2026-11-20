@@ -4147,7 +4147,7 @@ static inline void append_clipped_path(const ExtrusionPath& src_path,
                                        const double         flow_height_override,
                                        std::vector<ExtrusionPath>& dst)
 {
-    Polylines segments{src_path.polyline};
+    Polylines segments{src_path.polyline.to_polyline()};
     if (include_masks != nullptr && !include_masks->empty())
         segments = intersection_pl(std::move(segments), *include_masks);
     if (exclude_masks != nullptr && !exclude_masks->empty())
@@ -4156,7 +4156,9 @@ static inline void append_clipped_path(const ExtrusionPath& src_path,
     for (Polyline& segment : segments) {
         if (!segment.is_valid())
             continue;
-        ExtrusionPath clipped(segment, src_path);
+        ExtrusionPath clipped(Polyline3(segment), src_path);
+        // Clipping is done in 2D, so any per-point Z from Z contouring is dropped here.
+        clipped.z_contoured = false;
         apply_local_z_flow_height_override(clipped, flow_height_override);
         dst.emplace_back(std::move(clipped));
     }
@@ -4189,7 +4191,7 @@ static void local_z_order_clipped_paths_for_seam(std::vector<ExtrusionPath>& pat
     size_t best_anchor_idx = size_t(-1);
     double best_anchor_d2  = std::numeric_limits<double>::max();
     for (size_t idx = 0; idx < paths.size(); ++idx) {
-        const double d2 = local_z_polyline_distance2_to_point(paths[idx].polyline, seam_anchor);
+        const double d2 = local_z_polyline_distance2_to_point(paths[idx].polyline.to_polyline(), seam_anchor);
         if (d2 < best_anchor_d2) {
             best_anchor_d2  = d2;
             best_anchor_idx = idx;
@@ -4201,8 +4203,8 @@ static void local_z_order_clipped_paths_for_seam(std::vector<ExtrusionPath>& pat
         ExtrusionPath anchor_path = std::move(paths[best_anchor_idx]);
         paths.erase(paths.begin() + best_anchor_idx);
 
-        Polyline head;
-        Polyline tail;
+        Polyline3 head;
+        Polyline3 tail;
         Point split_point = seam_anchor;
         anchor_path.polyline.split_at(split_point, &head, &tail);
 
@@ -4348,13 +4350,13 @@ static inline Polylines collect_local_z_polylines(const ExtrusionEntityCollectio
     ExtrusionEntityCollection flattened = source.flatten(false);
     for (const ExtrusionEntity* entity : flattened.entities) {
         if (const auto* path = dynamic_cast<const ExtrusionPath*>(entity)) {
-            lines.emplace_back(path->polyline);
+            lines.emplace_back(path->polyline.to_polyline());
         } else if (const auto* multipath = dynamic_cast<const ExtrusionMultiPath*>(entity)) {
             for (const ExtrusionPath& p : multipath->paths)
-                lines.emplace_back(p.polyline);
+                lines.emplace_back(p.polyline.to_polyline());
         } else if (const auto* loop = dynamic_cast<const ExtrusionLoop*>(entity)) {
             for (const ExtrusionPath& p : loop->paths)
-                lines.emplace_back(p.polyline);
+                lines.emplace_back(p.polyline.to_polyline());
         }
     }
     return lines;
@@ -4731,7 +4733,9 @@ static bool split_extrusion_collection_for_pointillism_paths(
             dst = std::make_unique<ExtrusionEntityCollection>();
             dst->no_sort = source.no_sort;
         }
-        ExtrusionPath out_path(piece, src_path);
+        ExtrusionPath out_path(Polyline3(piece), src_path);
+        // Splitting is done in 2D, so any per-point Z from Z contouring is dropped here.
+        out_path.z_contoured = false;
         out_path.inset_idx = k_pointillism_path_inset_marker;
         dst->append(std::move(out_path));
         ++out_stats.segment_count;
@@ -4741,7 +4745,7 @@ static bool split_extrusion_collection_for_pointillism_paths(
     for (const ExtrusionEntity* entity : flattened.entities) {
         auto split_one_path = [&](const ExtrusionPath& path) {
             Polylines pieces;
-            split_polyline_by_length_for_pointillism(path.polyline, split_length_scaled, pieces);
+            split_polyline_by_length_for_pointillism(path.polyline.to_polyline(), split_length_scaled, pieces);
             const double trim_each_end = std::max(0.0, split_gap_scaled * 0.5);
             for (Polyline& piece : pieces) {
                 if (trim_each_end > EPSILON && !trim_polyline_for_pointillism_gap(piece, trim_each_end)) {
