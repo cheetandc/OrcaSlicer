@@ -1634,6 +1634,27 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
         }
     }
 
+    // Z contouring moves Z inside a layer. The features below assume a fixed Z per layer or set
+    // their own Z, so the combination is refused instead of producing unchecked toolpaths.
+    for (const PrintObject *object : m_objects) {
+        bool zaa = false, scarf = false;
+        for (size_t region_id = 0; region_id < object->num_printing_regions(); ++region_id) {
+            const PrintRegionConfig &region_config = object->printing_region(region_id).config();
+            zaa   |= region_config.zaa_enabled.value;
+            scarf |= region_config.seam_slope_type.value != SeamScarfType::None;
+        }
+        if (!zaa)
+            continue;
+        if (m_config.spiral_mode)
+            return {L("Z contouring does not work in spiral vase mode."), object, "zaa_enabled"};
+        if (object->config().raft_layers.value > 0)
+            return {L("Z contouring does not work with a raft."), object, "zaa_enabled"};
+        if (scarf)
+            return {L("Z contouring does not work with scarf seams. Set the scarf joint seam to None."), object, "zaa_enabled"};
+        if (m_config.dithering_local_z_mode)
+            return {L("Z contouring does not work with Local-Z dithering."), object, "zaa_enabled"};
+    }
+
     if (m_config.spiral_mode) {
         size_t total_copies_count = 0;
         for (const PrintObject* object : m_objects)
